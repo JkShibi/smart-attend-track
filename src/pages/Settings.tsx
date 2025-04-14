@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +10,17 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { Bell, Mail, Shield, User } from "lucide-react";
+import { Bell, Download, FileDown, Mail, Shield, User } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 const Settings = () => {
   const { toast } = useToast();
+  const { user, isTeacher } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [attendanceThreshold, setAttendanceThreshold] = useState([75]);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const handleSaveGeneral = () => {
     toast({
@@ -40,6 +43,176 @@ const Settings = () => {
     });
   };
 
+  const exportStudentData = async () => {
+    if (!isTeacher) {
+      toast({
+        title: "Permission Denied",
+        description: "Only teachers can export student data",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setExportLoading(true);
+    
+    try {
+      // Get profiles with student role
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, name, email, role")
+        .eq("role", "student");
+        
+      if (profilesError) throw profilesError;
+      
+      // Get student details
+      const { data: studentsData, error: studentsError } = await supabase
+        .from("students")
+        .select("profile_id, roll_number, class, attendance_percentage");
+        
+      if (studentsError) throw studentsError;
+      
+      // Combine the data
+      const combinedData = profilesData.map(profile => {
+        const studentDetails = studentsData.find(s => s.profile_id === profile.id);
+        
+        return {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          class: studentDetails?.class || "Not assigned",
+          rollNumber: studentDetails?.roll_number || "Not assigned",
+          attendance: studentDetails?.attendance_percentage || 0,
+        };
+      });
+      
+      // Convert to CSV
+      const headers = ["ID", "Name", "Email", "Class", "Roll Number", "Attendance %"];
+      const csvRows = [
+        headers.join(","),
+        ...combinedData.map(row => [
+          row.id,
+          `"${row.name}"`,
+          `"${row.email}"`,
+          `"${row.class}"`,
+          `"${row.rollNumber}"`,
+          row.attendance
+        ].join(","))
+      ];
+      
+      const csvContent = csvRows.join("\n");
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "students_data.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export Successful",
+        description: "Student data has been exported successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Export Failed",
+        description: error.message || "An error occurred during export",
+        variant: "destructive",
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const exportAttendanceData = async () => {
+    if (!isTeacher) {
+      toast({
+        title: "Permission Denied",
+        description: "Only teachers can export attendance data",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setExportLoading(true);
+    
+    try {
+      // Get attendance data with joined student and class info
+      const { data, error } = await supabase
+        .from("attendance")
+        .select(`
+          id, 
+          date, 
+          status,
+          students!inner(id, roll_number, profile_id),
+          classes!inner(id, name)
+        `);
+      
+      if (error) throw error;
+      
+      // Get student names from profiles
+      const profileIds = [...new Set(data.map(item => item.students.profile_id))];
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", profileIds);
+      
+      if (profilesError) throw profilesError;
+      
+      // Format data for CSV
+      const formattedData = data.map(item => {
+        const profile = profilesData.find(p => p.id === item.students.profile_id);
+        return {
+          date: new Date(item.date).toLocaleDateString(),
+          studentName: profile?.name || "Unknown",
+          rollNumber: item.students.roll_number,
+          class: item.classes.name,
+          status: item.status
+        };
+      });
+      
+      // Convert to CSV
+      const headers = ["Date", "Student Name", "Roll Number", "Class", "Status"];
+      const csvRows = [
+        headers.join(","),
+        ...formattedData.map(row => [
+          `"${row.date}"`,
+          `"${row.studentName}"`,
+          `"${row.rollNumber}"`,
+          `"${row.class}"`,
+          `"${row.status}"`
+        ].join(","))
+      ];
+      
+      const csvContent = csvRows.join("\n");
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "attendance_data.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export Successful",
+        description: "Attendance data has been exported successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Export Failed",
+        description: error.message || "An error occurred during export",
+        variant: "destructive",
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-between mb-6">
@@ -47,7 +220,7 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue="general" className="mb-6">
-        <TabsList className="grid grid-cols-3 w-full md:w-[400px]">
+        <TabsList className="grid grid-cols-4 w-full md:w-[500px]">
           <TabsTrigger value="general">
             <User className="h-4 w-4 mr-2" />
             General
@@ -59,6 +232,10 @@ const Settings = () => {
           <TabsTrigger value="system">
             <Shield className="h-4 w-4 mr-2" />
             System
+          </TabsTrigger>
+          <TabsTrigger value="export">
+            <FileDown className="h-4 w-4 mr-2" />
+            Export
           </TabsTrigger>
         </TabsList>
 
@@ -275,6 +452,53 @@ const Settings = () => {
             <CardFooter>
               <Button onClick={handleSaveSystem}>Save Changes</Button>
             </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="export" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Data</CardTitle>
+              <CardDescription>
+                Export system data for reporting and analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label>Student Data</Label>
+                <p className="text-sm text-muted-foreground">
+                  Export a CSV file containing all student information, including names, classes, and attendance records.
+                </p>
+                <Button 
+                  onClick={exportStudentData} 
+                  disabled={exportLoading || !isTeacher}
+                  className="w-full flex items-center justify-center"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  {exportLoading ? "Exporting..." : "Export Student Data"}
+                </Button>
+              </div>
+              <Separator />
+              <div className="space-y-3">
+                <Label>Attendance Records</Label>
+                <p className="text-sm text-muted-foreground">
+                  Export a CSV file containing detailed attendance records for all classes and students.
+                </p>
+                <Button 
+                  onClick={exportAttendanceData} 
+                  disabled={exportLoading || !isTeacher}
+                  className="w-full flex items-center justify-center"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  {exportLoading ? "Exporting..." : "Export Attendance Data"}
+                </Button>
+              </div>
+              {!isTeacher && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm">
+                  Note: Only teachers can export system data. Contact your administrator if you need access to this data.
+                </div>
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

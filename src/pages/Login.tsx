@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
-import { Lock, Mail, User, UserCheck } from "lucide-react";
+import { Lock, Mail, User, UserCheck, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -129,7 +129,7 @@ const Login = () => {
       
       toast({
         title: "Registration successful",
-        description: "Account created successfully! You can now log in.",
+        description: "Your account has been created! You can now log in.",
       });
       
       // Reset form and switch to login tab
@@ -152,10 +152,21 @@ const Login = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="w-full max-w-md p-4 animate-fade-in">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold">SmartAttend</h1>
+          <p className="text-muted-foreground">Student Attendance Management System</p>
+        </div>
+        
         <Tabs defaultValue="login" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="register">Register</TabsTrigger>
+            <TabsTrigger value="login" className="flex items-center">
+              <User className="w-4 h-4 mr-2" />
+              Login
+            </TabsTrigger>
+            <TabsTrigger value="register" className="flex items-center">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Register
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="login">
@@ -180,6 +191,7 @@ const Login = () => {
                         className="pl-10"
                         value={loginData.email}
                         onChange={handleLoginChange}
+                        required
                       />
                     </div>
                   </div>
@@ -194,6 +206,7 @@ const Login = () => {
                         className="pl-10"
                         value={loginData.password}
                         onChange={handleLoginChange}
+                        required
                       />
                     </div>
                   </div>
@@ -228,6 +241,7 @@ const Login = () => {
                         className="pl-10"
                         value={registerData.name}
                         onChange={handleRegisterChange}
+                        required
                       />
                     </div>
                   </div>
@@ -243,6 +257,7 @@ const Login = () => {
                         className="pl-10"
                         value={registerData.email}
                         onChange={handleRegisterChange}
+                        required
                       />
                     </div>
                   </div>
@@ -257,6 +272,9 @@ const Login = () => {
                         <SelectItem value="teacher">Teacher</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Select "Teacher" if you are an instructor or administrator.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="register-password">Password</Label>
@@ -269,6 +287,7 @@ const Login = () => {
                         className="pl-10"
                         value={registerData.password}
                         onChange={handleRegisterChange}
+                        required
                       />
                     </div>
                   </div>
@@ -283,14 +302,18 @@ const Login = () => {
                         className="pl-10"
                         value={registerData.confirmPassword}
                         onChange={handleRegisterChange}
+                        required
                       />
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col space-y-2">
                   <Button type="submit" className="w-full">
                     Create Account
                   </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    By registering, you agree to the terms and conditions of SmartAttend.
+                  </p>
                 </CardFooter>
               </form>
             </Card>
