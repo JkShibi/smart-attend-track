@@ -16,7 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const Settings = () => {
   const { toast } = useToast();
-  const { user, isTeacher } = useAuth();
+  const { user, isTeacher, isAdmin } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [attendanceThreshold, setAttendanceThreshold] = useState([75]);
@@ -44,10 +44,10 @@ const Settings = () => {
   };
 
   const exportStudentData = async () => {
-    if (!isTeacher) {
+    if (!isTeacher && !isAdmin) {
       toast({
         title: "Permission Denied",
-        description: "Only teachers can export student data",
+        description: "Only teachers and admins can export student data",
         variant: "destructive",
       });
       return;
@@ -56,7 +56,6 @@ const Settings = () => {
     setExportLoading(true);
     
     try {
-      // Get profiles with student role
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, name, email, role")
@@ -64,14 +63,12 @@ const Settings = () => {
         
       if (profilesError) throw profilesError;
       
-      // Get student details
       const { data: studentsData, error: studentsError } = await supabase
         .from("students")
         .select("profile_id, roll_number, class, attendance_percentage");
         
       if (studentsError) throw studentsError;
       
-      // Combine the data
       const combinedData = profilesData.map(profile => {
         const studentDetails = studentsData.find(s => s.profile_id === profile.id);
         
@@ -85,7 +82,6 @@ const Settings = () => {
         };
       });
       
-      // Convert to CSV
       const headers = ["ID", "Name", "Email", "Class", "Roll Number", "Attendance %"];
       const csvRows = [
         headers.join(","),
@@ -101,7 +97,6 @@ const Settings = () => {
       
       const csvContent = csvRows.join("\n");
       
-      // Create download link
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -127,10 +122,10 @@ const Settings = () => {
   };
 
   const exportAttendanceData = async () => {
-    if (!isTeacher) {
+    if (!isTeacher && !isAdmin) {
       toast({
         title: "Permission Denied",
-        description: "Only teachers can export attendance data",
+        description: "Only teachers and admins can export attendance data",
         variant: "destructive",
       });
       return;
@@ -139,7 +134,6 @@ const Settings = () => {
     setExportLoading(true);
     
     try {
-      // Get attendance data with joined student and class info
       const { data, error } = await supabase
         .from("attendance")
         .select(`
@@ -152,7 +146,6 @@ const Settings = () => {
       
       if (error) throw error;
       
-      // Get student names from profiles
       const profileIds = [...new Set(data.map(item => item.students.profile_id))];
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
@@ -161,7 +154,6 @@ const Settings = () => {
       
       if (profilesError) throw profilesError;
       
-      // Format data for CSV
       const formattedData = data.map(item => {
         const profile = profilesData.find(p => p.id === item.students.profile_id);
         return {
@@ -173,7 +165,6 @@ const Settings = () => {
         };
       });
       
-      // Convert to CSV
       const headers = ["Date", "Student Name", "Roll Number", "Class", "Status"];
       const csvRows = [
         headers.join(","),
@@ -188,7 +179,6 @@ const Settings = () => {
       
       const csvContent = csvRows.join("\n");
       
-      // Create download link
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -217,6 +207,12 @@ const Settings = () => {
     <>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Settings</h1>
+        {isAdmin && (
+          <Button variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200">
+            <Shield className="mr-2 h-4 w-4" />
+            Admin Mode
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="general" className="mb-6">
@@ -471,7 +467,7 @@ const Settings = () => {
                 </p>
                 <Button 
                   onClick={exportStudentData} 
-                  disabled={exportLoading || !isTeacher}
+                  disabled={exportLoading || (!isTeacher && !isAdmin)}
                   className="w-full flex items-center justify-center"
                 >
                   <Download className="mr-2 h-4 w-4" />
@@ -486,17 +482,49 @@ const Settings = () => {
                 </p>
                 <Button 
                   onClick={exportAttendanceData} 
-                  disabled={exportLoading || !isTeacher}
+                  disabled={exportLoading || (!isTeacher && !isAdmin)}
                   className="w-full flex items-center justify-center"
                 >
                   <Download className="mr-2 h-4 w-4" />
                   {exportLoading ? "Exporting..." : "Export Attendance Data"}
                 </Button>
               </div>
-              {!isTeacher && (
+              {!isTeacher && !isAdmin && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm">
-                  Note: Only teachers can export system data. Contact your administrator if you need access to this data.
+                  Note: Only teachers and administrators can export system data. Contact your administrator if you need access to this data.
                 </div>
+              )}
+              
+              {isAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <Label className="font-bold text-red-600">Administrator Controls</Label>
+                    <p className="text-sm text-muted-foreground">
+                      The following controls are only available to system administrators.
+                    </p>
+                    <div className="space-y-3 p-4 border border-red-200 rounded-md bg-red-50">
+                      <Button 
+                        variant="destructive"
+                        className="w-full"
+                      >
+                        Reset All Attendance Data
+                      </Button>
+                      <Button 
+                        variant="destructive"
+                        className="w-full"
+                      >
+                        Manage User Roles
+                      </Button>
+                      <Button 
+                        variant="destructive"
+                        className="w-full"
+                      >
+                        System Configuration
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

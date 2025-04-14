@@ -270,10 +270,11 @@ const Login = () => {
                       <SelectContent>
                         <SelectItem value="student">Student</SelectItem>
                         <SelectItem value="teacher">Teacher</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Select "Teacher" if you are an instructor or administrator.
+                      Select "Teacher" if you are an instructor, "Admin" for system administrators.
                     </p>
                   </div>
                   <div className="space-y-2">

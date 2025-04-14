@@ -9,6 +9,7 @@ interface AuthContextProps {
   profile: any;
   isLoading: boolean;
   isTeacher: boolean;
+  isAdmin: boolean; // Add isAdmin property
   signOut: () => Promise<void>;
 }
 
@@ -84,9 +85,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isTeacher = Boolean(profile?.role === "teacher");
+  const isAdmin = Boolean(profile?.role === "admin"); // Add isAdmin check
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, isLoading, isTeacher, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, isLoading, isTeacher, isAdmin, signOut }}>
       {children}
     </AuthContext.Provider>
   );

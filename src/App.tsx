@@ -41,9 +41,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Teacher only route
-const TeacherRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, isLoading, isTeacher } = useAuth();
+// Teacher or admin only route
+const TeacherOrAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading, isTeacher, isAdmin } = useAuth();
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -53,7 +53,26 @@ const TeacherRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" />;
   }
 
-  if (!isTeacher) {
+  if (!isTeacher && !isAdmin) {
+    return <Navigate to="/" />;
+  }
+
+  return <>{children}</>;
+};
+
+// Admin only route
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading, isAdmin } = useAuth();
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (!isAdmin) {
     return <Navigate to="/" />;
   }
 
@@ -72,9 +91,9 @@ const AppContent = () => (
       }>
         <Route path="/" element={<Dashboard />} />
         <Route path="/students" element={
-          <TeacherRoute>
+          <TeacherOrAdminRoute>
             <Students />
-          </TeacherRoute>
+          </TeacherOrAdminRoute>
         } />
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/reports" element={<Reports />} />

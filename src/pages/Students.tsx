@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { 
   Plus, 
@@ -66,7 +65,7 @@ interface Student {
 
 const Students = () => {
   const { toast } = useToast();
-  const { user, isTeacher } = useAuth();
+  const { user, isTeacher, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -103,14 +102,14 @@ const Students = () => {
       }
     };
 
-    if (user && isTeacher) {
+    if (user && (isTeacher || isAdmin)) {
       fetchClasses();
     }
-  }, [user, isTeacher, toast]);
+  }, [user, isTeacher, isAdmin, toast]);
 
   useEffect(() => {
-    // Check if user is a teacher
-    if (!isTeacher) {
+    // Check if user is a teacher or admin
+    if (!isTeacher && !isAdmin) {
       navigate("/");
       return;
     }
@@ -163,7 +162,7 @@ const Students = () => {
     };
 
     fetchStudents();
-  }, [user, isTeacher, navigate, toast]);
+  }, [user, isTeacher, isAdmin, navigate, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewStudent({
