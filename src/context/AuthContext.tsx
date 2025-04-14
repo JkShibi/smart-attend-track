@@ -9,7 +9,7 @@ interface AuthContextProps {
   profile: any;
   isLoading: boolean;
   isTeacher: boolean;
-  isAdmin: boolean; // Add isAdmin property
+  isAdmin: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -24,12 +24,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Fetch user profile data
+          // Use setTimeout to avoid recursive Supabase calls
           setTimeout(async () => {
             try {
               const { data, error } = await supabase
@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const isTeacher = Boolean(profile?.role === "teacher");
-  const isAdmin = Boolean(profile?.role === "admin"); // Add isAdmin check
+  const isAdmin = Boolean(profile?.role === "admin");
 
   return (
     <AuthContext.Provider value={{ session, user, profile, isLoading, isTeacher, isAdmin, signOut }}>

@@ -80,30 +80,34 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 // Root app component without authentication
-const AppContent = () => (
-  <BrowserRouter>
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route element={
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-      }>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/students" element={
-          <TeacherOrAdminRoute>
-            <Students />
-          </TeacherOrAdminRoute>
-        } />
-        <Route path="/attendance" element={<Attendance />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/settings" element={<Settings />} />
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  </BrowserRouter>
-);
+const AppContent = () => {
+  return (
+    <TooltipProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/students" element={
+              <TeacherOrAdminRoute>
+                <Students />
+              </TeacherOrAdminRoute>
+            } />
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

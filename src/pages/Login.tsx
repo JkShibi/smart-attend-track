@@ -10,22 +10,54 @@ import { useToast } from "@/components/ui/use-toast";
 import { Lock, Mail, User, UserCheck, UserPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { toast } from "sonner";
+
+// Create schema for login validation
+const loginSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+});
+
+// Create schema for registration validation
+const registerSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  confirmPassword: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  role: z.enum(["student", "teacher", "admin"], { 
+    required_error: "Please select a role", 
+  }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
 
 const Login = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { toast: uiToast } = useToast();
+  const [activeTab, setActiveTab] = useState("login");
   
-  const [loginData, setLoginData] = useState({
-    email: "",
-    password: "",
+  const loginForm = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
   });
-  
-  const [registerData, setRegisterData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    role: "student",
+
+  const registerForm = useForm<z.infer<typeof registerSchema>>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      role: "student",
+    },
   });
 
   useEffect(() => {
@@ -40,85 +72,42 @@ const Login = () => {
     checkSession();
   }, [navigate]);
 
-  const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLoginData({
-      ...loginData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRegisterData({
-      ...registerData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleRoleChange = (value: string) => {
-    setRegisterData({
-      ...registerData,
-      role: value,
-    });
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleLogin = async (values: z.infer<typeof loginSchema>) => {
     try {
+      toast.loading("Logging in...");
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginData.email,
-        password: loginData.password,
+        email: values.email,
+        password: values.password,
       });
       
       if (error) {
         throw error;
       }
       
-      toast({
-        title: "Login successful",
-        description: "Welcome back to SmartAttend!",
-      });
+      toast.dismiss();
+      toast.success("Login successful");
       
       navigate("/");
     } catch (error: any) {
-      toast({
-        title: "Login failed",
+      toast.dismiss();
+      toast.error("Login failed", {
         description: error.message || "An error occurred during login",
-        variant: "destructive",
       });
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Basic validation
-    if (!registerData.name || !registerData.email || !registerData.password) {
-      toast({
-        title: "Registration failed",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (registerData.password !== registerData.confirmPassword) {
-      toast({
-        title: "Registration failed",
-        description: "Passwords do not match",
-        variant: "destructive",
-      });
-      return;
-    }
-    
+  const handleRegister = async (values: z.infer<typeof registerSchema>) => {
     try {
+      toast.loading("Creating your account...");
+      
       const { data, error } = await supabase.auth.signUp({
-        email: registerData.email,
-        password: registerData.password,
+        email: values.email,
+        password: values.password,
         options: {
           data: {
-            name: registerData.name,
-            role: registerData.role,
+            name: values.name,
+            role: values.role,
           },
         },
       });
@@ -127,25 +116,20 @@ const Login = () => {
         throw error;
       }
       
-      toast({
-        title: "Registration successful",
-        description: "Your account has been created! You can now log in.",
+      toast.dismiss();
+      toast.success("Registration successful", {
+        description: "Your account has been created! You can now log in."
       });
       
       // Reset form and switch to login tab
-      setRegisterData({
-        name: "",
-        email: "",
-        password: "",
-        confirmPassword: "",
-        role: "student",
-      });
+      registerForm.reset();
+      setActiveTab("login");
     } catch (error: any) {
-      toast({
-        title: "Registration failed",
+      toast.dismiss();
+      toast.error("Registration failed", {
         description: error.message || "An error occurred during registration",
-        variant: "destructive",
       });
+      console.error("Registration error details:", error);
     }
   };
 
@@ -157,7 +141,7 @@ const Login = () => {
           <p className="text-muted-foreground">Student Attendance Management System</p>
         </div>
         
-        <Tabs defaultValue="login" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login" className="flex items-center">
               <User className="w-4 h-4 mr-2" />
@@ -177,46 +161,57 @@ const Login = () => {
                   Sign in to access the SmartAttend system
                 </CardDescription>
               </CardHeader>
-              <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="your.email@example.com"
-                        className="pl-10"
-                        value={loginData.email}
-                        onChange={handleLoginChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        className="pl-10"
-                        value={loginData.password}
-                        onChange={handleLoginChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" className="w-full">
-                    Sign In
-                  </Button>
-                </CardFooter>
-              </form>
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(handleLogin)}>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={loginForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                placeholder="your.email@example.com"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={loginForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Password</FormLabel>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                type="password"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                  <CardFooter>
+                    <Button type="submit" className="w-full">
+                      Sign In
+                    </Button>
+                  </CardFooter>
+                </form>
+              </Form>
             </Card>
           </TabsContent>
           
@@ -228,95 +223,125 @@ const Login = () => {
                   Register to start using SmartAttend
                 </CardDescription>
               </CardHeader>
-              <form onSubmit={handleRegister}>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="name"
-                        name="name"
-                        placeholder="John Doe"
-                        className="pl-10"
-                        value={registerData.name}
-                        onChange={handleRegisterChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="register-email"
-                        name="email"
-                        type="email"
-                        placeholder="your.email@example.com"
-                        className="pl-10"
-                        value={registerData.email}
-                        onChange={handleRegisterChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Select onValueChange={handleRoleChange} value={registerData.role}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student">Student</SelectItem>
-                        <SelectItem value="teacher">Teacher</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Select "Teacher" if you are an instructor, "Admin" for system administrators.
+              <Form {...registerForm}>
+                <form onSubmit={registerForm.handleSubmit(handleRegister)}>
+                  <CardContent className="space-y-4">
+                    <FormField
+                      control={registerForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Full Name</FormLabel>
+                          <div className="relative">
+                            <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                placeholder="John Doe"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={registerForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                placeholder="your.email@example.com"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={registerForm.control}
+                      name="role"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Role</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select your role" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="student">Student</SelectItem>
+                              <SelectItem value="teacher">Teacher</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Select "Teacher" if you are an instructor, "Admin" for system administrators.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={registerForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Password</FormLabel>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                type="password"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={registerForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirm Password</FormLabel>
+                          <div className="relative">
+                            <UserCheck className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                type="password"
+                                className="pl-10"
+                                {...field}
+                              />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                  <CardFooter className="flex flex-col space-y-2">
+                    <Button type="submit" className="w-full">
+                      Create Account
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      By registering, you agree to the terms and conditions of SmartAttend.
                     </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="register-password"
-                        name="password"
-                        type="password"
-                        className="pl-10"
-                        value={registerData.password}
-                        onChange={handleRegisterChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm Password</Label>
-                    <div className="relative">
-                      <UserCheck className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="confirm-password"
-                        name="confirmPassword"
-                        type="password"
-                        className="pl-10"
-                        value={registerData.confirmPassword}
-                        onChange={handleRegisterChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex flex-col space-y-2">
-                  <Button type="submit" className="w-full">
-                    Create Account
-                  </Button>
-                  <p className="text-xs text-center text-muted-foreground">
-                    By registering, you agree to the terms and conditions of SmartAttend.
-                  </p>
-                </CardFooter>
-              </form>
+                  </CardFooter>
+                </form>
+              </Form>
             </Card>
           </TabsContent>
         </Tabs>
