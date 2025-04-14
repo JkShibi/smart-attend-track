@@ -1,6 +1,8 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,21 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Lock, Mail, User, UserCheck, UserPlus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { toast } from "sonner";
 
-// Create schema for login validation
 const loginSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }),
 });
 
-// Create schema for registration validation
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -61,7 +59,6 @@ const Login = () => {
   });
 
   useEffect(() => {
-    // Check if user is already logged in
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -121,7 +118,6 @@ const Login = () => {
         description: "Your account has been created! You can now log in."
       });
       
-      // Reset form and switch to login tab
       registerForm.reset();
       setActiveTab("login");
     } catch (error: any) {
@@ -131,6 +127,37 @@ const Login = () => {
       });
       console.error("Registration error details:", error);
     }
+  };
+
+  const createSampleAdminUser = async () => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: 'admin@example.com',
+        password: 'Admin123!',
+        options: {
+          data: {
+            name: 'Sample Admin',
+            role: 'admin'
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        toast.success("Sample admin user created successfully!");
+        console.log("Sample admin user created:", data.user);
+      }
+    } catch (error: any) {
+      toast.error("Failed to create sample admin user", {
+        description: error.message
+      });
+      console.error("Admin user creation error:", error);
+    }
+  };
+
+  const handleCreateSampleAdmin = () => {
+    createSampleAdminUser();
   };
 
   return (
@@ -346,6 +373,17 @@ const Login = () => {
           </TabsContent>
         </Tabs>
       </div>
+      
+      {import.meta.env.DEV && (
+        <div className="absolute bottom-4 right-4">
+          <Button 
+            variant="outline" 
+            onClick={handleCreateSampleAdmin}
+          >
+            Create Sample Admin
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
