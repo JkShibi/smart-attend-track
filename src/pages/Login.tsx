@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Lock, Mail, User, UserCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -23,7 +25,20 @@ const Login = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    role: "student",
   });
+
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        navigate("/");
+      }
+    };
+    
+    checkSession();
+  }, [navigate]);
 
   const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLoginData({
@@ -39,31 +54,42 @@ const Login = () => {
     });
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleRoleChange = (value: string) => {
+    setRegisterData({
+      ...registerData,
+      role: value,
+    });
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Mock login - would be replaced with actual authentication
-    if (loginData.email && loginData.password) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password,
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
       toast({
         title: "Login successful",
         description: "Welcome back to SmartAttend!",
       });
       
-      // Log the query that would run in a real app
-      console.log("SQL Query: SELECT * FROM users WHERE email = '" + loginData.email + "' LIMIT 1");
-      
-      // Redirect to dashboard
       navigate("/");
-    } else {
+    } catch (error: any) {
       toast({
         title: "Login failed",
-        description: "Please enter your email and password",
+        description: error.message || "An error occurred during login",
         variant: "destructive",
       });
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Basic validation
@@ -85,24 +111,42 @@ const Login = () => {
       return;
     }
     
-    // Mock registration - would be replaced with actual authentication
-    toast({
-      title: "Registration successful",
-      description: "Account created successfully! You can now log in.",
-    });
-    
-    // Log the query that would run in a real app
-    console.log("SQL Query: INSERT INTO users (name, email, password) VALUES ('" + 
-      registerData.name + "', '" + 
-      registerData.email + "', 'hashed_password')");
-    
-    // Reset form and switch to login tab
-    setRegisterData({
-      name: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-    });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: registerData.email,
+        password: registerData.password,
+        options: {
+          data: {
+            name: registerData.name,
+            role: registerData.role,
+          },
+        },
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast({
+        title: "Registration successful",
+        description: "Account created successfully! You can now log in.",
+      });
+      
+      // Reset form and switch to login tab
+      setRegisterData({
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        role: "student",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Registration failed",
+        description: error.message || "An error occurred during registration",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -201,6 +245,18 @@ const Login = () => {
                         onChange={handleRegisterChange}
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="role">Role</Label>
+                    <Select onValueChange={handleRoleChange} value={registerData.role}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="student">Student</SelectItem>
+                        <SelectItem value="teacher">Teacher</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="register-password">Password</Label>

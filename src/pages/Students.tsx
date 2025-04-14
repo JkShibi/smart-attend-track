@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Plus, 
   Search, 
@@ -51,6 +51,9 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface Student {
   id: string;
@@ -63,57 +66,104 @@ interface Student {
 
 const Students = () => {
   const { toast } = useToast();
+  const { user, isTeacher } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [students, setStudents] = useState<Student[]>([
-    {
-      id: "ST001",
-      name: "Alice Johnson",
-      email: "alice.j@example.com",
-      class: "Biology 101",
-      rollNumber: "B101",
-      attendance: 95,
-    },
-    {
-      id: "ST002",
-      name: "Bob Smith",
-      email: "bob.s@example.com",
-      class: "Mathematics 202",
-      rollNumber: "M202",
-      attendance: 88,
-    },
-    {
-      id: "ST003",
-      name: "Charlie Brown",
-      email: "charlie.b@example.com",
-      class: "Physics 101",
-      rollNumber: "P101",
-      attendance: 75,
-    },
-    {
-      id: "ST004",
-      name: "Diana Miller",
-      email: "diana.m@example.com",
-      class: "Chemistry 201",
-      rollNumber: "C201",
-      attendance: 92,
-    },
-    {
-      id: "ST005",
-      name: "Eddie Wilson",
-      email: "eddie.w@example.com",
-      class: "Biology 101",
-      rollNumber: "B102",
-      attendance: 84,
-    },
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [classes, setClasses] = useState<string[]>([]);
 
   const [newStudent, setNewStudent] = useState({
-    name: "",
     email: "",
+    name: "",
     class: "",
     rollNumber: "",
   });
+
+  // Fetch classes for the dropdown
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("classes")
+          .select("name")
+          .eq("teacher_id", user?.id);
+          
+        if (error) throw error;
+        
+        setClasses(data.map(c => c.name));
+      } catch (error) {
+        console.error("Error fetching classes:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load classes",
+          variant: "destructive",
+        });
+      }
+    };
+
+    if (user && isTeacher) {
+      fetchClasses();
+    }
+  }, [user, isTeacher, toast]);
+
+  useEffect(() => {
+    // Check if user is a teacher
+    if (!isTeacher) {
+      navigate("/");
+      return;
+    }
+
+    // Fetch students data
+    const fetchStudents = async () => {
+      try {
+        setLoading(true);
+        
+        // Get profiles with student role
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, name, email, role")
+          .eq("role", "student");
+          
+        if (profilesError) throw profilesError;
+        
+        // Get student details
+        const { data: studentsData, error: studentsError } = await supabase
+          .from("students")
+          .select("profile_id, roll_number, class, attendance_percentage");
+          
+        if (studentsError) throw studentsError;
+        
+        // Combine the data
+        const combinedData = profilesData.map(profile => {
+          const studentDetails = studentsData.find(s => s.profile_id === profile.id);
+          
+          return {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            class: studentDetails?.class || "Not assigned",
+            rollNumber: studentDetails?.roll_number || "Not assigned",
+            attendance: studentDetails?.attendance_percentage || 0,
+          };
+        });
+        
+        setStudents(combinedData);
+      } catch (error) {
+        console.error("Error fetching students:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load students",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, [user, isTeacher, navigate, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setNewStudent({
@@ -129,7 +179,7 @@ const Students = () => {
     });
   };
 
-  const handleAddStudent = () => {
+  const handleAddStudent = async () => {
     // Validation
     if (!newStudent.name || !newStudent.email || !newStudent.class || !newStudent.rollNumber) {
       toast({
@@ -140,42 +190,66 @@ const Students = () => {
       return;
     }
 
-    // Generate a new ID
-    const newId = `ST${String(students.length + 1).padStart(3, "0")}`;
+    try {
+      // First, create a user account
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newStudent.email,
+        password: "temppassword123", // Temporary password, should be changed by the student
+        email_confirm: true,
+        user_metadata: {
+          name: newStudent.name,
+          role: "student",
+        },
+      });
+      
+      if (authError) throw authError;
+      
+      // The profile will be created by the trigger we set up
+      // Now add entry to students table
+      const { data: studentData, error: studentError } = await supabase
+        .from("students")
+        .insert({
+          profile_id: authData.user.id,
+          roll_number: newStudent.rollNumber,
+          class: newStudent.class,
+        })
+        .select();
+        
+      if (studentError) throw studentError;
+      
+      // Add the student to the list
+      setStudents([...students, {
+        id: authData.user.id,
+        name: newStudent.name,
+        email: newStudent.email,
+        class: newStudent.class,
+        rollNumber: newStudent.rollNumber,
+        attendance: 100,
+      }]);
 
-    // Create the new student object
-    const student: Student = {
-      id: newId,
-      name: newStudent.name,
-      email: newStudent.email,
-      class: newStudent.class,
-      rollNumber: newStudent.rollNumber,
-      attendance: 100, // Default for new students
-    };
+      // Reset the form
+      setNewStudent({
+        name: "",
+        email: "",
+        class: "",
+        rollNumber: "",
+      });
 
-    // Log the query that would be executed
-    console.log(`SQL Query: INSERT INTO students (id, name, email, class, roll_number) 
-      VALUES ('${newId}', '${newStudent.name}', '${newStudent.email}', '${newStudent.class}', '${newStudent.rollNumber}')`);
+      // Close the dialog
+      setOpen(false);
 
-    // Add the student to the array
-    setStudents([...students, student]);
-
-    // Reset the form
-    setNewStudent({
-      name: "",
-      email: "",
-      class: "",
-      rollNumber: "",
-    });
-
-    // Close the dialog
-    setOpen(false);
-
-    // Show success message
-    toast({
-      title: "Success",
-      description: "Student added successfully",
-    });
+      // Show success message
+      toast({
+        title: "Success",
+        description: "Student added successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add student",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredStudents = students.filter((student) =>
@@ -190,6 +264,14 @@ const Students = () => {
     if (attendance >= 75) return "text-amber-600 bg-amber-100";
     return "text-red-600 bg-red-100";
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -238,10 +320,11 @@ const Students = () => {
                     <SelectValue placeholder="Select a class" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Biology 101">Biology 101</SelectItem>
-                    <SelectItem value="Mathematics 202">Mathematics 202</SelectItem>
-                    <SelectItem value="Physics 101">Physics 101</SelectItem>
-                    <SelectItem value="Chemistry 201">Chemistry 201</SelectItem>
+                    {classes.map((className) => (
+                      <SelectItem key={className} value={className}>
+                        {className}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -293,59 +376,65 @@ const Students = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden md:table-cell">Email</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead className="hidden sm:table-cell">Roll #</TableHead>
-                <TableHead>Attendance</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStudents.map((student) => (
-                <TableRow key={student.id}>
-                  <TableCell>{student.id}</TableCell>
-                  <TableCell className="font-medium">{student.name}</TableCell>
-                  <TableCell className="hidden md:table-cell">{student.email}</TableCell>
-                  <TableCell>{student.class}</TableCell>
-                  <TableCell className="hidden sm:table-cell">{student.rollNumber}</TableCell>
-                  <TableCell>
-                    <span className={`text-xs px-2 py-1 rounded-full ${getAttendanceColor(student.attendance)}`}>
-                      {student.attendance}%
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <UserCog className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem>
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          Edit Student
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <UserMinus className="mr-2 h-4 w-4" />
-                          Delete Student
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          View Attendance
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {filteredStudents.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="hidden md:table-cell">Email</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead className="hidden sm:table-cell">Roll #</TableHead>
+                  <TableHead>Attendance</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredStudents.map((student) => (
+                  <TableRow key={student.id}>
+                    <TableCell>{student.id.substring(0, 8)}...</TableCell>
+                    <TableCell className="font-medium">{student.name}</TableCell>
+                    <TableCell className="hidden md:table-cell">{student.email}</TableCell>
+                    <TableCell>{student.class}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{student.rollNumber}</TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-1 rounded-full ${getAttendanceColor(student.attendance)}`}>
+                        {student.attendance}%
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <UserCog className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem>
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Edit Student
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <UserMinus className="mr-2 h-4 w-4" />
+                            Delete Student
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            View Attendance
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No students found</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </>
